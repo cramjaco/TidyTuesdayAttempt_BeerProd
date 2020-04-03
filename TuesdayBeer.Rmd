@@ -1,0 +1,68 @@
+---
+title: "Tidy Tuesday Beer"
+output: html_notebook
+---
+This is Jacob Cram's analysis of the Tidy Tuesday from 31 March 2020 that he did at R club on 03 April 2019
+
+Load in the data the fast way. One could also bring in all of the tidy Tuesday data
+```{r}
+brewing_materials <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/brewing_materials.csv')
+beer_taxed <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/beer_taxed.csv')
+brewer_size <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/brewer_size.csv')
+beer_states <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/beer_states.csv')
+```
+Here I look at the abundnace of malt and malt products over the couse of the timeseries.
+
+```{r}
+jacob_brewing_materials <- brewing_materials %>% filter(type == "Malt and malt products") %>% mutate(sortaDate = year + (month-.5)/12) 
+jacob_brewing_materials %>% ggplot(aes(x = sortaDate, y = month_current)) + geom_point()
+```
+Look at all of the grain products from the whole time series.
+```{r}
+jacob_brewing_materials <- brewing_materials %>% filter(material_type == "Grain Products") %>% mutate(sortaDate = year + (month-.5)/12) 
+jacob_brewing_materials %>% ggplot(aes(x = sortaDate, y = month_current)) + geom_point() + facet_wrap(~type, scales = "free") 
+```
+
+Gran and non grain together.
+```{r}
+jacob_brewing_materials <- brewing_materials  %>% mutate(sortaDate = year + (month-.5)/12) %>% filter(material_type %in% c("Grain Products", "Non-Grain Products"))
+plt <- jacob_brewing_materials %>% ggplot(aes(x = sortaDate, y = month_current, col = type)) + geom_point() + facet_wrap(~material_type)
+plt
+```
+Plotly allows me to mouse over points and see what they represent. I can slso do things like zoom into this plot.
+```{r}
+library(plotly)
+ggplotly(plt)
+```
+
+We wanted to look at seasonal patterns. Here I plot vs month and use color for year. Malt and malt products only.
+```{r}
+jacob_brewing_materials <- brewing_materials %>% filter(type == "Malt and malt products", year < 2015) %>% mutate(sortaDate = year + (month-.5)/12) 
+plt <- jacob_brewing_materials %>% ggplot(aes(x = month, y = month_current, col = year)) + geom_point() + scale_color_viridis_c()
+ggplotly(plt)
+```
+We decided to model malt and malt products as a seasonal sin function and then also look for long term effects.
+```{r}
+jacob_brewing_materials <- jacob_brewing_materials %>% mutate(klausSin = sin(2 * pi * sortaDate), klausCos = cos(2 * pi * sortaDate))
+
+jacob_malt <- jacob_brewing_materials %>% filter(type == "Malt and malt products", year < 2015)
+
+mod <- lm(month_current ~ klausSin + klausCos + sortaDate,data = jacob_malt)
+summary(mod)
+
+#plot(mod$fit, )
+```
+There are both seasonal and long term effects. If we include the 2015 data, where everthing is a lot lower (perhaps because the data weren't all in from that year yet), we don't have these nice effects.
+
+Predict estemates the value from the model. We plot model predictions (lines) vs actual values (points)
+```{r}
+jacob_malt_2 <- jacob_malt %>% mutate(pred = predict(mod, jacob_malt))
+jacob_malt_2 %>% ggplot(aes(x = sortaDate, y = pred)) + geom_line() + geom_point(aes(y = month_current))
+```
+
+Look at the residuals of the model.
+```{r}
+jacob_malt_2 %>% ggplot(aes(x = sortaDate, y = pred - month_current)) + geom_point(=)
+```
+
+And that all we had time for.
